@@ -14,37 +14,30 @@ bot = telegram.Bot(token=TELEGRAM_TOKEN)
 app = FastAPI()
 
 SYSTEM_PROMPT = (
-    "Ты — бот-эксперт по растениям, ландшафту и агрономии. "
+    "Ты — бот-эксперт по растениям, ландшафтному дизайну и агрономии. "
     "Пользователь задаёт вопросы: по уходу, поливу, освещению, подбору растений, болезням и т.д. "
     "Отвечай кратко, по делу, только по теме растений и ландшафтной работы. "
     "Если вопрос не по теме — скажи 'Я отвечаю только на вопросы по растениям и агрономии.'"
 )
 
-def get_wikidata_description(plant_name):
-    url = "https://www.wikidata.org/w/api.php"
-    params = {
-        "action": "wbsearchentities",
-        "search": plant_name,
-        "language": "ru",
-        "format": "json"
-    }
-    try:
-        r = requests.get(url, params=params, timeout=5).json()
-        if r['search']:
-            entity_id = r['search'][0]['id']
-            summary_url = f"https://www.wikidata.org/wiki/Special:EntityData/{entity_id}.json"
-            summary = requests.get(summary_url, timeout=5).json()
-            desc = summary['entities'][entity_id]['descriptions']
-            if 'ru' in desc:
-                return desc['ru']['value']
-            elif 'en' in desc:
-                return desc['en']['value']
-            else:
-                return "Нет описания на русском или английском."
-        else:
-            return "Нет данных в Wikidata."
-    except Exception as e:
-        return f"Ошибка Wikidata: {e}"
+def get_wikidata_description(query):
+    url = (
+        "https://www.wikidata.org/w/api.php"
+        "?action=wbsearchentities&format=json&language=ru&type=item&search=" + query
+    )
+    r = requests.get(url)
+    results = r.json().get("search", [])
+    if not results:
+        return ""
+    entity_id = results[0]["id"]
+    desc_url = (
+        "https://www.wikidata.org/w/api.php"
+        "?action=wbgetentities&format=json&languages=ru&ids=" + entity_id
+    )
+    desc_r = requests.get(desc_url)
+    entity = desc_r.json().get("entities", {}).get(entity_id, {})
+    description = entity.get("descriptions", {}).get("ru", {}).get("value", "")
+    return description
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
@@ -65,5 +58,19 @@ async def telegram_webhook(request: Request):
         messages=messages
     )
     gpt_answer = chat.choices[0].message.content.strip()
+
+    # Если ответ короткий или "не знаю" — дополняем парсингом
+    if (
+        "я отвечаю только на вопросы по растениям" in gpt_answer.lower()
+        or len(gpt_answer) < 20
+    ):
+        desc = get_wikidata_description(text)
+        if desc:
+            answer = f"{gpt_answer}\n{desc}"
+        else:
+            answer = gpt_answer
+    else:
+        answer = gpt_answer
+
     bot.send_message(chat_id=chat_id, text=answer)
     return JSONResponse(content={"ok": True})
