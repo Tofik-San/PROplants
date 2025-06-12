@@ -72,7 +72,7 @@ async def telegram_webhook(request: Request):
         or len(gpt_answer) < 20
     ):
         wiki = get_wikidata_description(text)
-        answer = f"{gpt_answer}\n\nWikidata: {wiki}"
+        answer = f"{gpt_answer}\n{wiki}"
     else:
         answer = gpt_answer
 
