@@ -4,6 +4,7 @@ import openai
 import os
 from dotenv import load_dotenv
 import telegram
+import requests
 
 load_dotenv()
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -12,19 +13,38 @@ bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 app = FastAPI()
 
-SYSTEM_PROMPT = """
-Ты — бот эксперт по растениям, ландшафтному дизайну и агрономии.
-Пользователь задаёт вопросы по уходу, поливу, освещению, подбору растений, болезням, совместимости, защите и сезонным работам.
+SYSTEM_PROMPT = (
+    "Ты — бот-эксперт по растениям, ландшафту и агрономии. "
+    "Пользователь задаёт вопросы: по уходу, поливу, освещению, подбору растений, болезням и т.д. "
+    "Отвечай кратко, по делу, только по теме растений и ландшафтной работы. "
+    "Если вопрос не по теме — скажи 'Я отвечаю только на вопросы по растениям и агрономии.'"
+)
 
-Отвечай кратко, точно и по делу.
-Только по теме растений, агрономии, ухода, ландшафтной практики.
-Если вопрос не по теме — строго отвечай:
-Я отвечаю только на вопросы по растениям и агрономии.
-
-Тон: деловой, спокойный, профессиональный.
-Стиль: как у опытного агронома или ландшафтного архитектора, без лишней вежливости и воды.
-Говори чётко, без вступлений и философии.
-"""
+def get_wikidata_description(plant_name):
+    url = "https://www.wikidata.org/w/api.php"
+    params = {
+        "action": "wbsearchentities",
+        "search": plant_name,
+        "language": "ru",
+        "format": "json"
+    }
+    try:
+        r = requests.get(url, params=params, timeout=5).json()
+        if r['search']:
+            entity_id = r['search'][0]['id']
+            summary_url = f"https://www.wikidata.org/wiki/Special:EntityData/{entity_id}.json"
+            summary = requests.get(summary_url, timeout=5).json()
+            desc = summary['entities'][entity_id]['descriptions']
+            if 'ru' in desc:
+                return desc['ru']['value']
+            elif 'en' in desc:
+                return desc['en']['value']
+            else:
+                return "Нет описания на русском или английском."
+        else:
+            return "Нет данных в Wikidata."
+    except Exception as e:
+        return f"Ошибка Wikidata: {e}"
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
@@ -36,7 +56,6 @@ async def telegram_webhook(request: Request):
     if not chat_id or not text:
         return JSONResponse(content={"ok": True})
 
-    # Отправка в GPT
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": text}
@@ -45,9 +64,17 @@ async def telegram_webhook(request: Request):
         model="gpt-3.5-turbo",
         messages=messages
     )
-    answer = chat.choices[0].message.content.strip()
+    gpt_answer = chat.choices[0].message.content.strip()
 
-    # Ответ пользователю
+    # Если бот не знает или слишком коротко — добавь Wikidata
+    if (
+        "я отвечаю только на вопросы по растениям" in gpt_answer.lower()
+        or len(gpt_answer) < 20
+    ):
+        wiki = get_wikidata_description(text)
+        answer = f"{gpt_answer}\n\nWikidata: {wiki}"
+    else:
+        answer = gpt_answer
+
     bot.send_message(chat_id=chat_id, text=answer)
     return JSONResponse(content={"ok": True})
-
