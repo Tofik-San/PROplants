@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+openai
+python-dotenv
+urllib3==1.26.16
+python-telegram-bot==13.15
