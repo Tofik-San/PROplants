@@ -65,16 +65,5 @@ async def telegram_webhook(request: Request):
         messages=messages
     )
     gpt_answer = chat.choices[0].message.content.strip()
-
-    # Если бот не знает или слишком коротко — добавь Wikidata
-    if (
-        "я отвечаю только на вопросы по растениям" in gpt_answer.lower()
-        or len(gpt_answer) < 20
-    ):
-        wiki = get_wikidata_description(text)
-        answer = f"{gpt_answer}\n{wiki}"
-    else:
-        answer = gpt_answer
-
     bot.send_message(chat_id=chat_id, text=answer)
     return JSONResponse(content={"ok": True})
