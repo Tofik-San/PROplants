@@ -144,7 +144,7 @@ async def telegram_webhook(request: Request):
         except Exception as e:
             answer = f"Ошибка при генерации ответа: {e}"
 
-        bot.send_message(chat_id=chat_id, text="Готово! Вот твой структурированный ответ:")
+        bot.send_message(chat_id=chat_id, text="Готово! Вот что можно предпринять:")
         bot.send_message(chat_id=chat_id, text=answer)
 
         # Кнопка "Рестарт"
