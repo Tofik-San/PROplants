@@ -12,12 +12,29 @@ bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 app = FastAPI()
 
-SYSTEM_PROMPT = (
-    "Отвечай только на вопросы по растениям, агрономии, уходу, болезням, подбору. "
-    "Не используй приветствия, обращения, извинения и вводные фразы. Только факт, коротко, строго по теме."
-)
+# --- Простое состояние: в памяти процесса (для MVP/теста) ---
+user_states = {}
 
-BLOCKED_COMMANDS = {"/start", "start", "привет", "hello", "hi"}
+QUESTIONS = [
+    "Укажи, в какой сфере/роли ты сейчас (например: бизнес, обучение, здоровье, маркетинг, другое)?",
+    "Какую задачу нужно решить? Опиши одним-двумя предложениями.",
+    "Какой конечный результат или цель? (Пример: инструкция, рекомендации, подбор вариантов, список идей)",
+    "Есть ли детали, ограничения или пожелания? (Если нет — напиши «нет»)"
+]
+
+def get_next_question(state):
+    idx = state.get('step', 0)
+    if idx < len(QUESTIONS):
+        return QUESTIONS[idx]
+    return None
+
+def build_prompt(state):
+    return (
+        f"Сфера: {state.get('role','')}\n"
+        f"Задача: {state.get('task','')}\n"
+        f"Цель: {state.get('goal','')}\n"
+        f"Дополнительно: {state.get('details','')}"
+    )
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
@@ -29,20 +46,61 @@ async def telegram_webhook(request: Request):
     if not chat_id or not text:
         return JSONResponse(content={"ok": True})
 
-    # Блокируем приветствия и пустые запросы
-    if text.lower() in BLOCKED_COMMANDS:
-        bot.send_message(chat_id=chat_id, text="Задай вопрос по растениям или агрономии.")
+    # Инициализация состояния пользователя
+    state = user_states.get(chat_id, {"step": 0})
+
+    # Сбросить прогресс командой /reset
+    if text.lower() in {"/start", "start", "/reset"}:
+        user_states[chat_id] = {"step": 0}
+        bot.send_message(chat_id=chat_id, text="Я помогу составить точный запрос к ИИ. Просто отвечай на вопросы.")
+        bot.send_message(chat_id=chat_id, text=QUESTIONS[0])
         return JSONResponse(content={"ok": True})
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": text}
-    ]
-    chat = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=messages
-    )
-    answer = chat.choices[0].message.content.strip()
+    step = state.get("step", 0)
 
-    bot.send_message(chat_id=chat_id, text=answer)
+    # Первый вход, если нет состояния
+    if step == 0 and "role" not in state:
+        state["role"] = text
+        state["step"] = 1
+        user_states[chat_id] = state
+        bot.send_message(chat_id=chat_id, text=QUESTIONS[1])
+        return JSONResponse(content={"ok": True})
+    if step == 1 and "task" not in state:
+        state["task"] = text
+        state["step"] = 2
+        user_states[chat_id] = state
+        bot.send_message(chat_id=chat_id, text=QUESTIONS[2])
+        return JSONResponse(content={"ok": True})
+    if step == 2 and "goal" not in state:
+        state["goal"] = text
+        state["step"] = 3
+        user_states[chat_id] = state
+        bot.send_message(chat_id=chat_id, text=QUESTIONS[3])
+        return JSONResponse(content={"ok": True})
+    if step == 3 and "details" not in state:
+        state["details"] = text
+        # Формируем итоговый промт
+        prompt = build_prompt(state)
+        messages = [
+            {"role": "system", "content": "Отвечай чётко, по делу, без лирики. Оцени ввод как промт для ИИ, дай подробный ответ."},
+            {"role": "user", "content": prompt}
+        ]
+        try:
+            chat = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages
+            )
+            answer = chat.choices[0].message.content.strip()
+        except Exception as e:
+            answer = f"Ошибка при генерации ответа: {e}"
+        # Выдаём результат
+        bot.send_message(chat_id=chat_id, text="Готово! Вот твой структурированный ответ:")
+        bot.send_message(chat_id=chat_id, text=answer)
+        bot.send_message(chat_id=chat_id, text="Хочешь повторить? Напиши /start")
+        user_states.pop(chat_id, None)
+        return JSONResponse(content={"ok": True})
+
+    # Неожиданный шаг — сброс
+    bot.send_message(chat_id=chat_id, text="Напиши /start чтобы начать заново.")
+    user_states.pop(chat_id, None)
     return JSONResponse(content={"ok": True})
