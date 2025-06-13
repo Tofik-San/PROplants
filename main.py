@@ -20,6 +20,18 @@ def send_role_keyboard(chat_id):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     bot.send_message(chat_id=chat_id, text="Выберите сферу:", reply_markup=reply_markup)
+    @app.post("/webhook")
+async def telegram_webhook(request: Request):
+    data = await request.json()
+    message = data.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    text = message.get("text", "").strip() if "text" in message else ""
+
+    # 1. Если /start — показываем клавиатуру
+    if text.lower() in {"/start", "start", "/reset"}:
+        user_states[chat_id] = {"step": 0}
+        send_role_keyboard(chat_id)
+        return JSONResponse(content={"ok": True})
 
 
 app = FastAPI()
