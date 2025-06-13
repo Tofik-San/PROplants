@@ -19,10 +19,14 @@ user_states = {}
 # Функция отправки клавиатуры
 def send_role_keyboard(chat_id):
     keyboard = [
-        [InlineKeyboardButton("Работа", callback_data='role_work')],
-        [InlineKeyboardButton("Обучение", callback_data='role_study')],
-        [InlineKeyboardButton("Бизнес", callback_data='role_business')],
-        [InlineKeyboardButton("Маркетинг", callback_data='role_marketing')]
+        [
+            InlineKeyboardButton("Работа", callback_data='role_work'),
+            InlineKeyboardButton("Обучение", callback_data='role_study')
+        ],
+        [
+            InlineKeyboardButton("Бизнес", callback_data='role_business'),
+            InlineKeyboardButton("Маркетинг", callback_data='role_marketing')
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     bot.send_message(chat_id=chat_id, text="Выберите сферу:", reply_markup=reply_markup)
