@@ -15,7 +15,16 @@ app = FastAPI()
 
 user_states = {}
 
-# Приветствие + Help/О проекте
+# === ФУНКЦИЯ ЗАГРУЗКИ ФАЙЛОВОГО ПРОМТА ===
+def load_prompt_template(role_key):
+    file_path = f"prompts/{role_key}.txt"
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return "Роль: Неизвестно\nТон: \nСтиль: \nОграничения: "
+
+# === КНОПКИ ===
 def send_greeting_keyboard(chat_id):
     keyboard = [
         [InlineKeyboardButton("Help", callback_data='help')],
@@ -24,7 +33,6 @@ def send_greeting_keyboard(chat_id):
     reply_markup = InlineKeyboardMarkup(keyboard)
     bot.send_message(chat_id=chat_id, text="Привет, я помощник.", reply_markup=reply_markup)
 
-# Клавиатура выбора сферы
 def send_role_keyboard(chat_id):
     keyboard = [
         [
@@ -43,11 +51,10 @@ def send_role_keyboard(chat_id):
 async def telegram_webhook(request: Request):
     data = await request.json()
 
-    # Обработка callback-кнопок
+    # === CALLBACK-КНОПКИ ===
     callback_query = data.get("callback_query", {})
     if callback_query:
         selection = callback_query.get("data")
-        user_id = callback_query.get("from", {}).get("id")
         chat_id = callback_query.get("message", {}).get("chat", {}).get("id")
 
         if selection == "help":
@@ -67,37 +74,11 @@ async def telegram_webhook(request: Request):
             bot.answer_callback_query(callback_query_id=callback_query["id"])
             return JSONResponse(content={"ok": True})
 
-        templates = {
-            "work": {
-                "role": "Сотрудник компании",
-                "tone": "Деловой, четкий",
-                "style": "Кратко, по сути",
-                "constraints": "Не использовать лишних деталей, только факты"
-            },
-            "study": {
-                "role": "Студент",
-                "tone": "Нейтральный, дружелюбный",
-                "style": "Просто, доступно",
-                "constraints": "Без лишних терминов"
-            },
-            "business": {
-                "role": "Владелец бизнеса",
-                "tone": "Стратегический, уверенный",
-                "style": "Аналитика, выводы",
-                "constraints": "Без воды, только решения"
-            },
-            "marketing": {
-                "role": "Маркетолог",
-                "tone": "Креативный, мотивирующий",
-                "style": "Ярко, цепко",
-                "constraints": "Избегать шаблонов, никаких клише"
-            }
-        }
-
+        # === Внешние шаблоны ===
         if selection.startswith("role_"):
             role_key = selection.split("_")[1]
-            template = templates[role_key]
-            user_states[chat_id] = {"step": 1, "template": template}
+            template_text = load_prompt_template(role_key)
+            user_states[chat_id] = {"step": 1, "template": template_text}
 
             EXAMPLES = {
                 "work": "Ваша должность? Например: 'Менеджер проектов', 'Инженер', 'Программист'",
@@ -109,7 +90,7 @@ async def telegram_webhook(request: Request):
             bot.answer_callback_query(callback_query_id=callback_query["id"])
             return JSONResponse(content={"ok": True})
 
-    # Обычные текстовые сообщения
+    # === ОБРАБОТКА СООБЩЕНИЙ ===
     message = data.get("message", {})
     chat_id = message.get("chat", {}).get("id")
     text = message.get("text", "").strip() if "text" in message else ""
@@ -142,16 +123,14 @@ async def telegram_webhook(request: Request):
 
     if step == 3 and "goal" not in state:
         state["goal"] = text
-        tpl = state.get("template", {})
-        prompt = (
-            f"Роль: {tpl.get('role','')}\n"
-            f"Тон: {tpl.get('tone','')}\n"
-            f"Стиль: {tpl.get('style','')}\n"
-            f"Ограничения: {tpl.get('constraints','')}\n"
-            f"Контекст: {state.get('detail','')}\n"
+        template_text = state.get("template", "")
+        additions = (
+            f"\nКонтекст: {state.get('detail','')}\n"
             f"Задача: {state.get('task','')}\n"
             f"Цель: {state.get('goal','')}"
         )
+        prompt = template_text + additions
+
         messages = [
             {"role": "system", "content": "Отвечай чётко, по делу, без лирики. Оцени ввод как промт для ИИ, дай подробный ответ."},
             {"role": "user", "content": prompt}
@@ -168,7 +147,7 @@ async def telegram_webhook(request: Request):
         bot.send_message(chat_id=chat_id, text="Готово! Вот твой структурированный ответ:")
         bot.send_message(chat_id=chat_id, text=answer)
 
-        # Кнопка "Рестарт" для нового запроса
+        # Кнопка "Рестарт"
         restart_keyboard = InlineKeyboardMarkup(
             [[InlineKeyboardButton("Рестарт", callback_data='restart')]]
         )
@@ -177,7 +156,7 @@ async def telegram_webhook(request: Request):
         user_states.pop(chat_id, None)
         return JSONResponse(content={"ok": True})
 
-    # Неожиданный шаг — сброс
+    # Любой неожиданный ввод — сброс
     bot.send_message(chat_id=chat_id, text="Напиши /start чтобы начать заново.")
     user_states.pop(chat_id, None)
     return JSONResponse(content={"ok": True})
