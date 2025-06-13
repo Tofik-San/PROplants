@@ -132,7 +132,7 @@ async def telegram_webhook(request: Request):
         prompt = template_text + additions
 
         messages = [
-            {"role": "system", "content": "Отвечай чётко, по делу, без лирики. Оцени ввод как промт для ИИ, дай подробный ответ."},
+            {"role": "system", "content": "Ты — эксперт по теме запроса. Дай подробный, конкретный ответ по задаче ниже. Никаких оценок или рекомендаций по формулировке вопроса — только решение по существу."},
             {"role": "user", "content": prompt}
         ]
         try:
