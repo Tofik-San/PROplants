@@ -30,6 +30,14 @@ def load_prompt_template(role_key):
     except Exception:
         return "Роль: Неизвестно\nТон: \nСтиль: \nОграничения: "
 
+def render_prompt(template_text, user_data):
+    # user_data = {"detail": ..., "task": ..., "goal": ...}
+    return template_text.format(
+        details=user_data.get("detail", ""),
+        task=user_data.get("task", ""),
+        goal=user_data.get("goal", "")
+    )
+
 def send_role_keyboard(chat_id):
     keyboard = [
         [
@@ -120,15 +128,15 @@ async def telegram_webhook(request: Request):
     if step == 3 and "goal" not in state:
         state["goal"] = text
         template_text = state.get("template", "")
-        additions = (
-            f"\nКонтекст: {state.get('detail','')}\n"
-            f"Задача: {state.get('task','')}\n"
-            f"Цель: {state.get('goal','')}"
-        )
-        prompt = template_text + additions
+
+        # Формируем финальный промт с динамической подстановкой
+        prompt = render_prompt(template_text, state)
 
         messages = [
-            {"role": "system", "content": "Ты — эксперт по теме запроса. Дай подробный, конкретный ответ по задаче ниже. Никаких оценок или рекомендаций по формулировке вопроса — только решение по существу."},
+            {
+                "role": "system",
+                "content": "Ты — эксперт по теме запроса. Дай подробный, конкретный ответ по задаче ниже. Никаких оценок или рекомендаций по формулировке вопроса — только решение по существу."
+            },
             {"role": "user", "content": prompt}
         ]
         try:
@@ -142,7 +150,6 @@ async def telegram_webhook(request: Request):
 
         bot.send_message(chat_id=chat_id, text="Готово! Вот твой структурированный ответ:", reply_markup=static_keyboard)
         bot.send_message(chat_id=chat_id, text=answer, reply_markup=static_keyboard)
-        # Не показываем кнопку "Рестарт" отдельно! Просто оставляем статичную клавиатуру
         user_states.pop(chat_id, None)
         return JSONResponse(content={"ok": True})
 
