@@ -20,8 +20,9 @@ def send_role_keyboard(chat_id):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     bot.send_message(chat_id=chat_id, text="Выберите сферу:", reply_markup=reply_markup)
+    
     @app.post("/webhook")
-async def telegram_webhook(request: Request):
+    async def telegram_webhook(request: Request):
     data = await request.json()
     message = data.get("message", {})
     chat_id = message.get("chat", {}).get("id")
