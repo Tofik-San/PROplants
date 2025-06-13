@@ -44,7 +44,7 @@ def send_role_keyboard(chat_id):
     reply_markup = InlineKeyboardMarkup(keyboard)
     bot.send_message(chat_id=chat_id, text="Выберите сферу:", reply_markup=reply_markup)
     # Статичная клавиатура всегда внизу
-    bot.send_message(chat_id=chat_id, text="Для возврата и справки используйте кнопки ниже.", reply_markup=static_keyboard)
+    bot.send_message(chat_id=chat_id, reply_markup=static_keyboard)
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
