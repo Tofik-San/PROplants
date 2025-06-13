@@ -4,7 +4,7 @@ import openai
 import os
 from dotenv import load_dotenv
 import telegram
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 load_dotenv()
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -15,7 +15,13 @@ app = FastAPI()
 
 user_states = {}
 
-# === ФУНКЦИЯ ЗАГРУЗКИ ФАЙЛОВОГО ПРОМТА ===
+# Статичная клавиатура (всегда внизу)
+static_keyboard = ReplyKeyboardMarkup(
+    [['Рестарт', 'Help']],
+    resize_keyboard=True,
+    one_time_keyboard=False
+)
+
 def load_prompt_template(role_key):
     file_path = f"prompts/{role_key}.txt"
     try:
@@ -23,15 +29,6 @@ def load_prompt_template(role_key):
             return f.read()
     except Exception:
         return "Роль: Неизвестно\nТон: \nСтиль: \nОграничения: "
-
-# === КНОПКИ ===
-def send_greeting_keyboard(chat_id):
-    keyboard = [
-        [InlineKeyboardButton("Help", callback_data='help')],
-        [InlineKeyboardButton("О проекте", callback_data='about')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    bot.send_message(chat_id=chat_id, text="Привет, я помощник.", reply_markup=reply_markup)
 
 def send_role_keyboard(chat_id):
     keyboard = [
@@ -46,35 +43,19 @@ def send_role_keyboard(chat_id):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     bot.send_message(chat_id=chat_id, text="Выберите сферу:", reply_markup=reply_markup)
+    # Статичная клавиатура всегда внизу
+    bot.send_message(chat_id=chat_id, text="Для возврата и справки используйте кнопки ниже.", reply_markup=static_keyboard)
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
     data = await request.json()
 
-    # === CALLBACK-КНОПКИ ===
+    # CALLBACK-КНОПКИ (только выбор сферы)
     callback_query = data.get("callback_query", {})
     if callback_query:
         selection = callback_query.get("data")
         chat_id = callback_query.get("message", {}).get("chat", {}).get("id")
 
-        if selection == "help":
-            bot.send_message(chat_id=chat_id, text="Сейчас покажу как это работает")
-            send_role_keyboard(chat_id)
-            bot.answer_callback_query(callback_query_id=callback_query["id"])
-            return JSONResponse(content={"ok": True})
-
-        if selection == "about":
-            bot.send_message(chat_id=chat_id, text="Помогаю с задачами")
-            bot.answer_callback_query(callback_query_id=callback_query["id"])
-            return JSONResponse(content={"ok": True})
-
-        if selection == "restart":
-            user_states[chat_id] = {"step": 0}
-            send_greeting_keyboard(chat_id)
-            bot.answer_callback_query(callback_query_id=callback_query["id"])
-            return JSONResponse(content={"ok": True})
-
-        # === Внешние шаблоны ===
         if selection.startswith("role_"):
             role_key = selection.split("_")[1]
             template_text = load_prompt_template(role_key)
@@ -86,11 +67,11 @@ async def telegram_webhook(request: Request):
                 "business": "Вид бизнеса? Например: 'Розничная торговля', 'Онлайн-курсы', 'IT-консалтинг'",
                 "marketing": "Тип задачи? Например: 'Запуск рекламы', 'Аналитика конкурентов', 'Разработка слогана'"
             }
-            bot.send_message(chat_id=chat_id, text=EXAMPLES[role_key])
+            bot.send_message(chat_id=chat_id, text=EXAMPLES[role_key], reply_markup=static_keyboard)
             bot.answer_callback_query(callback_query_id=callback_query["id"])
             return JSONResponse(content={"ok": True})
 
-    # === ОБРАБОТКА СООБЩЕНИЙ ===
+    # ОБРАБОТКА СООБЩЕНИЙ
     message = data.get("message", {})
     chat_id = message.get("chat", {}).get("id")
     text = message.get("text", "").strip() if "text" in message else ""
@@ -100,9 +81,26 @@ async def telegram_webhook(request: Request):
 
     state = user_states.get(chat_id, {"step": 0})
 
+    # Старт: приветствие, описание, выбор сферы
     if text.lower() in {"/start", "start"}:
         user_states[chat_id] = {"step": 0}
-        send_greeting_keyboard(chat_id)
+        bot.send_message(
+            chat_id=chat_id,
+            text="Привет, я помощник.\nКратко: этот бот помогает по задачам в выбранной сфере. Выберите сферу ниже.",
+            reply_markup=static_keyboard
+        )
+        send_role_keyboard(chat_id)
+        return JSONResponse(content={"ok": True})
+
+    # Рестарт: только выбор сферы (без приветствия)
+    if text == "Рестарт":
+        user_states[chat_id] = {"step": 0}
+        send_role_keyboard(chat_id)
+        return JSONResponse(content={"ok": True})
+
+    # Help: просто текст help
+    if text == "Help":
+        bot.send_message(chat_id=chat_id, text="Help: выбери сферу, ответь на 3 вопроса, получи готовый ответ.", reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
     step = state.get("step", 0)
@@ -111,14 +109,14 @@ async def telegram_webhook(request: Request):
         state["detail"] = text
         state["step"] = 2
         user_states[chat_id] = state
-        bot.send_message(chat_id=chat_id, text="Какую задачу нужно решить?")
+        bot.send_message(chat_id=chat_id, text="Какую задачу нужно решить?", reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
     if step == 2 and "task" not in state:
         state["task"] = text
         state["step"] = 3
         user_states[chat_id] = state
-        bot.send_message(chat_id=chat_id, text="Какой результат хотите получить?")
+        bot.send_message(chat_id=chat_id, text="Какой результат хотите получить?", reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
     if step == 3 and "goal" not in state:
@@ -144,19 +142,13 @@ async def telegram_webhook(request: Request):
         except Exception as e:
             answer = f"Ошибка при генерации ответа: {e}"
 
-        bot.send_message(chat_id=chat_id, text="Готово! Вот что можно предпринять:")
-        bot.send_message(chat_id=chat_id, text=answer)
-
-        # Кнопка "Рестарт"
-        restart_keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Рестарт", callback_data='restart')]]
-        )
-        bot.send_message(chat_id=chat_id, text="Новый вопрос? Нажми 'Рестарт'", reply_markup=restart_keyboard)
-
+        bot.send_message(chat_id=chat_id, text="Готово! Вот твой структурированный ответ:", reply_markup=static_keyboard)
+        bot.send_message(chat_id=chat_id, text=answer, reply_markup=static_keyboard)
+        # Не показываем кнопку "Рестарт" отдельно! Просто оставляем статичную клавиатуру
         user_states.pop(chat_id, None)
         return JSONResponse(content={"ok": True})
 
-    # Любой неожиданный ввод — сброс
-    bot.send_message(chat_id=chat_id, text="Напиши /start чтобы начать заново.")
+    # Любой неожиданный ввод — сброс и выбор сферы
+    bot.send_message(chat_id=chat_id, text="Некорректный ввод. Нажми 'Рестарт' и выбери сферу заново.", reply_markup=static_keyboard)
     user_states.pop(chat_id, None)
     return JSONResponse(content={"ok": True})
