@@ -132,6 +132,8 @@ async def telegram_webhook(request: Request):
         # Формируем финальный промт с динамической подстановкой
         prompt = render_prompt(template_text, state)
 
+        print("DEBUG PROMPT:\n", prompt)
+
         messages = [
             {
                 "role": "system",
