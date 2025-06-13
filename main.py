@@ -133,7 +133,6 @@ async def telegram_webhook(request: Request):
         prompt = render_prompt(template_text, state)
 
         print("DEBUG PROMPT:\n", prompt)
-
         print("DEBUG FILE PATH:", file_path)
         
         messages = [
