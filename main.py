@@ -9,6 +9,18 @@ load_dotenv()
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+def send_role_keyboard(chat_id):
+    keyboard = [
+        [InlineKeyboardButton("Работа", callback_data='role_work')],
+        [InlineKeyboardButton("Обучение", callback_data='role_study')],
+        [InlineKeyboardButton("Бизнес", callback_data='role_business')],
+        [InlineKeyboardButton("Маркетинг", callback_data='role_marketing')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    bot.send_message(chat_id=chat_id, text="Выберите сферу:", reply_markup=reply_markup)
+
 
 app = FastAPI()
 
