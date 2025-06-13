@@ -134,6 +134,8 @@ async def telegram_webhook(request: Request):
 
         print("DEBUG PROMPT:\n", prompt)
 
+        print("DEBUG FILE PATH:", file_path)
+        
         messages = [
             {
                 "role": "system",
