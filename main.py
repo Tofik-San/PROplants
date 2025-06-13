@@ -13,10 +13,18 @@ bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 app = FastAPI()
 
-# --- Простое состояние: в памяти процесса (для MVP/теста) ---
 user_states = {}
 
-# Функция отправки клавиатуры
+# Приветствие + Help/О проекте
+def send_greeting_keyboard(chat_id):
+    keyboard = [
+        [InlineKeyboardButton("Help", callback_data='help')],
+        [InlineKeyboardButton("О проекте", callback_data='about')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    bot.send_message(chat_id=chat_id, text="Привет, я помощник.", reply_markup=reply_markup)
+
+# Клавиатура выбора сферы
 def send_role_keyboard(chat_id):
     keyboard = [
         [
@@ -31,27 +39,6 @@ def send_role_keyboard(chat_id):
     reply_markup = InlineKeyboardMarkup(keyboard)
     bot.send_message(chat_id=chat_id, text="Выберите сферу:", reply_markup=reply_markup)
 
-QUESTIONS = [
-    "Укажи, в какой сфере/роли ты сейчас (например: бизнес, обучение, здоровье, маркетинг, другое)?",
-    "Какую задачу нужно решить? Опиши одним-двумя предложениями.",
-    "Какой конечный результат или цель? (Пример: инструкция, рекомендации, подбор вариантов, список идей)",
-    "Есть ли детали, ограничения или пожелания? (Если нет — напиши «нет»)"
-]
-
-def get_next_question(state):
-    idx = state.get('step', 0)
-    if idx < len(QUESTIONS):
-        return QUESTIONS[idx]
-    return None
-
-def build_prompt(state):
-    return (
-        f"Сфера: {state.get('role','')}\n"
-        f"Задача: {state.get('task','')}\n"
-        f"Цель: {state.get('goal','')}\n"
-        f"Дополнительно: {state.get('details','')}"
-    )
-
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
     data = await request.json()
@@ -62,6 +49,23 @@ async def telegram_webhook(request: Request):
         selection = callback_query.get("data")
         user_id = callback_query.get("from", {}).get("id")
         chat_id = callback_query.get("message", {}).get("chat", {}).get("id")
+
+        if selection == "help":
+            bot.send_message(chat_id=chat_id, text="Сейчас покажу как это работает")
+            send_role_keyboard(chat_id)
+            bot.answer_callback_query(callback_query_id=callback_query["id"])
+            return JSONResponse(content={"ok": True})
+
+        if selection == "about":
+            bot.send_message(chat_id=chat_id, text="Помогаю с задачами")
+            bot.answer_callback_query(callback_query_id=callback_query["id"])
+            return JSONResponse(content={"ok": True})
+
+        if selection == "restart":
+            user_states[chat_id] = {"step": 0}
+            send_greeting_keyboard(chat_id)
+            bot.answer_callback_query(callback_query_id=callback_query["id"])
+            return JSONResponse(content={"ok": True})
 
         templates = {
             "work": {
@@ -93,7 +97,7 @@ async def telegram_webhook(request: Request):
         if selection.startswith("role_"):
             role_key = selection.split("_")[1]
             template = templates[role_key]
-            user_states[user_id] = {"step": 1, "template": template}
+            user_states[chat_id] = {"step": 1, "template": template}
 
             EXAMPLES = {
                 "work": "Ваша должность? Например: 'Менеджер проектов', 'Инженер', 'Программист'",
@@ -115,9 +119,9 @@ async def telegram_webhook(request: Request):
 
     state = user_states.get(chat_id, {"step": 0})
 
-    if text.lower() in {"/start", "start", "/reset"}:
+    if text.lower() in {"/start", "start"}:
         user_states[chat_id] = {"step": 0}
-        send_role_keyboard(chat_id)
+        send_greeting_keyboard(chat_id)
         return JSONResponse(content={"ok": True})
 
     step = state.get("step", 0)
@@ -128,15 +132,16 @@ async def telegram_webhook(request: Request):
         user_states[chat_id] = state
         bot.send_message(chat_id=chat_id, text="Какую задачу нужно решить?")
         return JSONResponse(content={"ok": True})
+
     if step == 2 and "task" not in state:
         state["task"] = text
         state["step"] = 3
         user_states[chat_id] = state
         bot.send_message(chat_id=chat_id, text="Какой результат хотите получить?")
         return JSONResponse(content={"ok": True})
+
     if step == 3 and "goal" not in state:
         state["goal"] = text
-        # Сборка промта для OpenAI
         tpl = state.get("template", {})
         prompt = (
             f"Роль: {tpl.get('role','')}\n"
@@ -162,10 +167,17 @@ async def telegram_webhook(request: Request):
 
         bot.send_message(chat_id=chat_id, text="Готово! Вот твой структурированный ответ:")
         bot.send_message(chat_id=chat_id, text=answer)
-        bot.send_message(chat_id=chat_id, text="Хочешь повторить? Напиши /start")
+
+        # Кнопка "Рестарт" для нового запроса
+        restart_keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Рестарт", callback_data='restart')]]
+        )
+        bot.send_message(chat_id=chat_id, text="Новый вопрос? Нажми 'Рестарт'", reply_markup=restart_keyboard)
+
         user_states.pop(chat_id, None)
         return JSONResponse(content={"ok": True})
 
+    # Неожиданный шаг — сброс
     bot.send_message(chat_id=chat_id, text="Напиши /start чтобы начать заново.")
     user_states.pop(chat_id, None)
     return JSONResponse(content={"ok": True})
