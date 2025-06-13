@@ -15,7 +15,7 @@ app = FastAPI()
 
 user_states = {}
 
-# Статичная клавиатура (всегда внизу)
+# Статичная клавиатура
 static_keyboard = ReplyKeyboardMarkup(
     [['Рестарт', 'Help']],
     resize_keyboard=True,
@@ -24,19 +24,27 @@ static_keyboard = ReplyKeyboardMarkup(
 
 def load_prompt_template(role_key):
     file_path = f"prompts/{role_key}.txt"
+    print("DEBUG FILE PATH:", file_path)
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
-    except Exception:
+    except Exception as e:
+        print("ERROR LOADING TEMPLATE:", e)
         return "Роль: Неизвестно\nТон: \nСтиль: \nОграничения: "
 
 def render_prompt(template_text, user_data):
     # user_data = {"detail": ..., "task": ..., "goal": ...}
-    return template_text.format(
-        details=user_data.get("detail", ""),
-        task=user_data.get("task", ""),
-        goal=user_data.get("goal", "")
-    )
+    try:
+        prompt = template_text.format(
+            details=user_data.get("detail", ""),
+            task=user_data.get("task", ""),
+            goal=user_data.get("goal", "")
+        )
+    except Exception as e:
+        print("ERROR RENDER PROMPT:", e)
+        prompt = template_text
+    print("DEBUG PROMPT:", prompt)
+    return prompt
 
 def send_role_keyboard(chat_id):
     keyboard = [
@@ -64,6 +72,7 @@ async def telegram_webhook(request: Request):
 
         if selection.startswith("role_"):
             role_key = selection.split("_")[1]
+            print("DEBUG ROLE_KEY:", role_key)
             template_text = load_prompt_template(role_key)
             user_states[chat_id] = {"step": 1, "template": template_text}
 
@@ -132,13 +141,10 @@ async def telegram_webhook(request: Request):
         # Формируем финальный промт с динамической подстановкой
         prompt = render_prompt(template_text, state)
 
-        print("DEBUG PROMPT:\n", prompt)
-        print("DEBUG FILE PATH:", file_path)
-        
         messages = [
             {
                 "role": "system",
-                "content": "Ты — эксперт по теме запроса. Дай только конкретное решение задачи пользователя по входящему промту, не обсуждай роль, тон, стиль, не давай советы по структуре промта. Запрещено анализировать текст задачи. Только действия и рекомендации по сути задачи."
+                "content": "Ты — эксперт по теме запроса. Дай подробный, конкретный ответ по задаче ниже. Никаких оценок или рекомендаций по формулировке вопроса — только решение по существу."
             },
             {"role": "user", "content": prompt}
         ]
