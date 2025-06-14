@@ -101,12 +101,12 @@ async def telegram_webhook(request: Request):
         user_states[chat_id] = {"step": 0}
         bot.send_message(
             chat_id=chat_id,
-            text="Привет, я твой AI-помощник ASKT \n-Автоматизированный Cтруктурированный Переводчик Знаний.
+            text="""Привет, я твой AI-помощник ASKT \n-Автоматизированный Cтруктурированный Переводчик Знаний.
                                                      Automated          Structured        Translator  Knowledge 
 
                   Я помогаю тебе решать задачи по твоему запросу!
 
-                  Выбери сферу. Ответь на 3 вопроса. Получи точный результат.",
+                  Выбери сферу. Ответь на 3 вопроса. Получи точный результат.""",
             reply_markup=static_keyboard
         )
         send_role_keyboard(chat_id)
