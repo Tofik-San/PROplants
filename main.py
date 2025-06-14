@@ -17,7 +17,7 @@ user_states = {}
 
 # Статичная клавиатура (всегда внизу)
 static_keyboard = ReplyKeyboardMarkup(
-    [['Рестарт', 'Help', 'О проекте'], ['Отзыв']],
+    [['Рестарт', 'Help', 'О проекте', 'Отзыв']],
     resize_keyboard=True,
     one_time_keyboard=False
 )
@@ -131,15 +131,6 @@ ASKT помогает:
 
     # О проекте: выводит описание
     if text == "О проекте":
-    elif text == "Отзыв":
-        bot.send_message(
-            chat_id=chat_id,
-            text="Хочешь оставить отзыв или предложение? Переходи в канал:\n\n👉 https://t.me/ASKT_Feedback",
-            reply_markup=static_keyboard
-        )
-        return JSONResponse(content={"ok": True})
-
-    
         bot.send_message(chat_id=chat_id, text="""ASKT — Автоматизированный Структурированный Переводчик Знаний.
 
 📌 Что это:
@@ -186,6 +177,14 @@ ASKT — это не бот. Это стартовая точка взаимод
 
 📬 Для связи: @veryhappyEpta
 """, reply_markup=static_keyboard)
+        return JSONResponse(content={"ok": True})
+
+    if text == "Отзыв":
+        bot.send_message(
+            chat_id=chat_id,
+            text="Хочешь оставить отзыв или предложение? Переходи сюда:\n👉 https://t.me/ASKT_Feedback",
+            reply_markup=static_keyboard
+        )
         return JSONResponse(content={"ok": True})
 
     if text == "Help":
@@ -241,11 +240,3 @@ ASKT — это не бот. Это стартовая точка взаимод
     bot.send_message(chat_id=chat_id, text="Некорректный ввод. Нажми 'Рестарт' и выбери сферу заново.", reply_markup=static_keyboard)
     user_states.pop(chat_id, None)
     return JSONResponse(content={"ok": True})
-
-@app.post("/")
-async def root():
-    return {"status": "online"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
