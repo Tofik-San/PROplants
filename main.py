@@ -98,7 +98,7 @@ async def telegram_webhook(request: Request):
 
     # Help: просто текст help
     if text == "Help":
-        bot.send_message(chat_id=chat_id, text="Help: выбери сферу, ответь на 3 вопроса, получи готовый ответ.", reply_markup=static_keyboard)
+        bot.send_message(chat_id=chat_id, text= "Выбери сферу, ответь на 3 вопроса, получи готовый ответ.", reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
     # О проекте: выводит описание
