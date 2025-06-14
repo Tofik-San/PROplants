@@ -182,7 +182,7 @@ ASKT — это не бот. Это стартовая точка взаимод
     if text == "Отзыв":
         bot.send_message(
             chat_id=chat_id,
-            text="Хочешь оставить отзыв или предложение? Переходи сюда:\n👉https://t.me/ASKT_Feedback",
+            text="Хочешь оставить отзыв или предложение? Переходи сюда:\n👉https://t.me/@ASKTFeedbackBot",
             reply_markup=static_keyboard
         )
         return JSONResponse(content={"ok": True})
