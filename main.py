@@ -1,115 +1,157 @@
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-import telegram
+import openai
 import os
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from dotenv import load_dotenv
+import telegram
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 load_dotenv()
-
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 app = FastAPI()
 
-# Статичная клавиатура с кнопками
+user_states = {}
+
+# Статичная клавиатура (всегда внизу)
 static_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="🔄 Рестарт")],
-        [KeyboardButton(text="💼 Работа"), KeyboardButton(text="🎓 Учёба")],
-        [KeyboardButton(text="📈 Бизнес"), KeyboardButton(text="📣 Маркетинг")],
-        [KeyboardButton(text="🧩 Help"), KeyboardButton(text="ℹ️ О проекте")]
-    ],
+    [['Рестарт', 'Help', 'О проекте']],
     resize_keyboard=True,
     one_time_keyboard=False
 )
 
+def load_prompt_template(role_key):
+    file_path = f"prompts/{role_key}.txt"
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return "Роль: Неизвестно\nТон: \nСтиль: \nОграничения: "
+
+def send_role_keyboard(chat_id):
+    keyboard = [
+        [
+            InlineKeyboardButton("Работа", callback_data='role_work'),
+            InlineKeyboardButton("Обучение", callback_data='role_study')
+        ],
+        [
+            InlineKeyboardButton("Бизнес", callback_data='role_business'),
+            InlineKeyboardButton("Маркетинг", callback_data='role_marketing')
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    bot.send_message(chat_id=chat_id, text="Выберите сферу:", reply_markup=reply_markup)
+    
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
     data = await request.json()
+
+    # CALLBACK-КНОПКИ (только выбор сферы)
+    callback_query = data.get("callback_query", {})
+    if callback_query:
+        selection = callback_query.get("data")
+        chat_id = callback_query.get("message", {}).get("chat", {}).get("id")
+
+        if selection.startswith("role_"):
+            role_key = selection.split("_")[1]
+            template_text = load_prompt_template(role_key)
+            user_states[chat_id] = {"step": 1, "template": template_text}
+
+            EXAMPLES = {
+                "work": "Ваша должность? Например: 'Менеджер проектов', 'Инженер', 'Программист'",
+                "study": "Ваш курс/специализация? Например: 'Психология', 'Frontend-разработчик', 'Графический дизайн'",
+                "business": "Вид бизнеса? Например: 'Розничная торговля', 'Онлайн-курсы', 'IT-консалтинг'",
+                "marketing": "Тип задачи? Например: 'Запуск рекламы', 'Аналитика конкурентов', 'Разработка слогана'"
+            }
+            bot.send_message(chat_id=chat_id, text=EXAMPLES[role_key], reply_markup=static_keyboard)
+            bot.answer_callback_query(callback_query_id=callback_query["id"])
+            return JSONResponse(content={"ok": True})
+
+    # ОБРАБОТКА СООБЩЕНИЙ
     message = data.get("message", {})
-    text = message.get("text", "")
-    chat = message.get("chat", {})
-    chat_id = chat.get("id")
+    chat_id = message.get("chat", {}).get("id")
+    text = message.get("text", "").strip() if "text" in message else ""
 
-    if not chat_id:
+    if not chat_id or not text:
         return JSONResponse(content={"ok": True})
 
-    if text == "/start":
-        welcome_text = """👋 Привет! Я — твой AI-помощник ASKT
-(Автоматизированный Структурированный Конструктор Твоих задач).
+    state = user_states.get(chat_id, {"step": 0})
 
-Помогаю решать вопросы — быстро и по делу.
-Без промтов, без лишнего текста.
-
-Выбирай сферу, отвечай на 3 вопроса —
-и сразу получаешь точный результат.
-
-ℹ Как всё работает — кнопка Help
-📎 Кто я и зачем — кнопка О проекте
-
-🚀 Готов? Поехали:"""
-        bot.send_message(chat_id=chat_id, text=welcome_text, reply_markup=static_keyboard)
+    # Старт: приветствие, описание, выбор сферы
+    if text.lower() in {"/start", "start"}:
+        user_states[chat_id] = {"step": 0}
+        bot.send_message(
+            chat_id=chat_id,
+            text="Привет, я помощник.\nКратко: этот бот помогает по задачам в выбранной сфере. Выберите сферу ниже.",
+            reply_markup=static_keyboard
+        )
+        send_role_keyboard(chat_id)
         return JSONResponse(content={"ok": True})
 
-    if text == "🧩 Help":
-        help_text = """ℹ️ Как работает ASKT:
-
-1. Ты выбираешь сферу задачи: работа, учёба, бизнес или маркетинг.
-2. Отвечаешь на 3 вопроса: кто ты, что нужно решить, какой результат хочешь.
-3. Я собираю промт и передаю его в GPT-3.5-turbo — нейросеть, обученную решать задачи по контексту.
-
-⚙️ Что я делаю:
-— Формулирую понятный и точный ответ  
-— Помогаю с идеями, планами, текстами  
-— Упрощаю сложные задачи и формулировки  
-
-❌ Что я не делаю:
-— Не ищу в интернете  
-— Не работаю с файлами (пока)  
-— Не пишу код, графики, таблицы
-
-✉ Пример:
-> Я студент. Хочу получить схему подготовки к экзамену по праву.
-
-Результат: чёткий план действий с разбивкой по дням.
-
-🛠 Готов к запуску? Жми «Рестарт»
-
-📎 Хочешь больше?
-
-— Подключение ChatGPT с GPT-4  
-— Таблицы, файлы, генерация документов  
-— Настройка GPT под конкретные задачи  
-— Сопровождение и подбор рабочих инструментов
-
-Предоставлю:  
-— Качественный VPN  
-— Удобный сервис для оплаты подписок  
-— Помощь с установкой и настройкой
-
-Связь 👉 @veryhappyEpta"""
-        bot.send_message(chat_id=chat_id, text=help_text, reply_markup=static_keyboard)
+    # Рестарт: только выбор сферы (без приветствия)
+    if text == "Рестарт":
+        user_states[chat_id] = {"step": 0}
+        send_role_keyboard(chat_id)
         return JSONResponse(content={"ok": True})
 
-    if text == "ℹ️ О проекте":
-        project_info = """ℹ️ О проекте:
-
-ASОKT — это инструмент, который превращает любую задачу в точный запрос к ИИ.
-
-Он не требует знаний prompt-инженерии и не использует шаблоны. Просто отвечаешь на 3 вопроса — и получаешь конкретный, логичный результат.
-
-Создан для тех, кто ценит время и хочет получить помощь без лишнего.
-
-Проект активно развивается. За новостями и обновлениями — @veryhappyEpta"""
-        bot.send_message(chat_id=chat_id, text=project_info, reply_markup=static_keyboard)
+    # Help: просто текст help
+    if text == "Help":
+        bot.send_message(chat_id=chat_id, text="Help: выбери сферу, ответь на 3 вопроса, получи готовый ответ.", reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
-    if text == "🔄 Рестарт":
-        bot.send_message(chat_id=chat_id, text="Выбери сферу 👇", reply_markup=static_keyboard)
+    step = state.get("step", 0)
+
+    if step == 1 and "detail" not in state:
+        state["detail"] = text
+        state["step"] = 2
+        user_states[chat_id] = state
+        bot.send_message(chat_id=chat_id, text="Какую задачу нужно решить?", reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
-    bot.send_message(chat_id=chat_id, text="Выбери действие с помощью кнопок ниже 👇", reply_markup=static_keyboard)
+    if step == 2 and "task" not in state:
+        state["task"] = text
+        state["step"] = 3
+        user_states[chat_id] = state
+        bot.send_message(chat_id=chat_id, text="Какой результат хотите получить?", reply_markup=static_keyboard)
+        return JSONResponse(content={"ok": True})
+
+    if step == 3 and "goal" not in state:
+        state["goal"] = text
+        template_text = state.get("template", "")
+        additions = (
+            f"\nКонтекст: {state.get('detail','')}\n"
+            f"Задача: {state.get('task','')}\n"
+            f"Цель: {state.get('goal','')}"
+        )
+        prompt = template_text + additions
+
+        messages = [
+            {"role": "system", "content": "Ты — эксперт по теме запроса. Дай подробный, конкретный ответ по задаче ниже. Никаких оценок или рекомендаций по формулировке вопроса — только решение по существу."},
+            {"role": "user", "content": prompt}
+        ]
+        try:
+            chat = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages
+            )
+            answer = chat.choices[0].message.content.strip()
+        except Exception as e:
+            answer = f"Ошибка при генерации ответа: {e}"
+
+        bot.send_message(chat_id=chat_id, text="Готово! Вот твой структурированный ответ:", reply_markup=static_keyboard)
+        bot.send_message(chat_id=chat_id, text=answer, reply_markup=static_keyboard)
+        # Не показываем кнопку "Рестарт" отдельно! Просто оставляем статичную клавиатуру
+        user_states.pop(chat_id, None)
+        return JSONResponse(content={"ok": True})
+
+    # Любой неожиданный ввод — сброс и выбор сферы
+    bot.send_message(chat_id=chat_id, text="Некорректный ввод. Нажми 'Рестарт' и выбери сферу заново.", reply_markup=static_keyboard)
+    user_states.pop(chat_id, None)
     return JSONResponse(content={"ok": True})
+    if text == "О проекте":
+        bot.send_message(chat_id=chat_id, text="GPT идиот.", reply_markup=static_keyboard)
+        return JSONResponse(content={"ok": True})
+
+    
