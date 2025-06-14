@@ -241,3 +241,11 @@ ASKT — это не бот. Это стартовая точка взаимод
     bot.send_message(chat_id=chat_id, text="Некорректный ввод. Нажми 'Рестарт' и выбери сферу заново.", reply_markup=static_keyboard)
     user_states.pop(chat_id, None)
     return JSONResponse(content={"ok": True})
+
+@app.post("/")
+async def root():
+    return {"status": "online"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
