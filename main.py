@@ -151,7 +151,7 @@ async def telegram_webhook(request: Request):
     user_states.pop(chat_id, None)
     return JSONResponse(content={"ok": True})
     if text == "О проекте":
-    bot.send_message(chat_id=chat_id, text="""ℹ️ О проекте:
+        bot.send_message(chat_id=chat_id, text="""ℹ️ О проекте:
 
 ASОKT — это инструмент, который превращает любую задачу в точный запрос к ИИ.
 
@@ -160,5 +160,6 @@ ASОKT — это инструмент, который превращает лю
 Создан для тех, кто ценит время и хочет получить помощь без лишнего.
 
 Проект активно развивается. За новостями и обновлениями — @veryhappyEpta""", reply_markup=static_keyboard)
-    return JSONResponse(content={"ok": True})
+        return JSONResponse(content={"ok": True})
+
     
