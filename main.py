@@ -1,15 +1,20 @@
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+import telegram
 import os
 
-API_TOKEN = os.getenv("BOT_TOKEN")
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+bot = telegram.Bot(token=TELEGRAM_TOKEN)
+
 app = FastAPI()
 
+# Статичная клавиатура с кнопками
 static_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🔄 Рестарт")],
@@ -21,14 +26,15 @@ static_keyboard = ReplyKeyboardMarkup(
     one_time_keyboard=False
 )
 
-@app.post("/")
-async def receive_update(request: Request):
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
     data = await request.json()
     message = data.get("message", {})
-    chat_id = message.get("chat", {}).get("id")
-    text = message.get("text")
+    text = message.get("text", "")
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
 
-    if not chat_id or not text:
+    if not chat_id:
         return JSONResponse(content={"ok": True})
 
     if text == "/start":
@@ -45,7 +51,7 @@ async def receive_update(request: Request):
 📎 Кто я и зачем — кнопка О проекте
 
 🚀 Готов? Поехали:"""
-        await bot.send_message(chat_id=chat_id, text=welcome_text, reply_markup=static_keyboard)
+        bot.send_message(chat_id=chat_id, text=welcome_text, reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
     if text == "🧩 Help":
@@ -85,7 +91,7 @@ async def receive_update(request: Request):
 — Помощь с установкой и настройкой
 
 Связь 👉 @veryhappyEpta"""
-        await bot.send_message(chat_id=chat_id, text=help_text, reply_markup=static_keyboard)
+        bot.send_message(chat_id=chat_id, text=help_text, reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
     if text == "ℹ️ О проекте":
@@ -98,8 +104,12 @@ ASОKT — это инструмент, который превращает лю
 Создан для тех, кто ценит время и хочет получить помощь без лишнего.
 
 Проект активно развивается. За новостями и обновлениями — @veryhappyEpta"""
-        await bot.send_message(chat_id=chat_id, text=project_info, reply_markup=static_keyboard)
+        bot.send_message(chat_id=chat_id, text=project_info, reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
-    await bot.send_message(chat_id=chat_id, text="Выбери одну из опций ниже 👇", reply_markup=static_keyboard)
+    if text == "🔄 Рестарт":
+        bot.send_message(chat_id=chat_id, text="Выбери сферу 👇", reply_markup=static_keyboard)
+        return JSONResponse(content={"ok": True})
+
+    bot.send_message(chat_id=chat_id, text="Выбери действие с помощью кнопок ниже 👇", reply_markup=static_keyboard)
     return JSONResponse(content={"ok": True})
