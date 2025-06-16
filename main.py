@@ -222,8 +222,8 @@ ASKT — это не бот. Это стартовая точка взаимод
         prompt = template_text + additions
 
         messages = [
-            {"role": "system", "content": "Ты — эксперт по теме запроса. Дай подробный, конкретный ответ по задаче ниже. Никаких оценок или рекомендаций по формулировке вопроса — только решение по существу."},
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": additions}
         ]
         try:
             chat = client.chat.completions.create(
