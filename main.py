@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import openai
@@ -15,7 +16,6 @@ app = FastAPI()
 
 user_states = {}
 
-# Статичная клавиатура (всегда внизу)
 static_keyboard = ReplyKeyboardMarkup(
     [['Рестарт', 'Help', 'О проекте', 'Отзыв']],
     resize_keyboard=True,
@@ -43,12 +43,11 @@ def send_role_keyboard(chat_id):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     bot.send_message(chat_id=chat_id, text="Выберите сферу:", reply_markup=reply_markup)
-    
+
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
     data = await request.json()
 
-    # CALLBACK-КНОПКИ (только выбор сферы)
     callback_query = data.get("callback_query", {})
     if callback_query:
         selection = callback_query.get("data")
@@ -69,7 +68,6 @@ async def telegram_webhook(request: Request):
             bot.answer_callback_query(callback_query_id=callback_query["id"])
             return JSONResponse(content={"ok": True})
 
-    # ОБРАБОТКА СООБЩЕНИЙ
     message = data.get("message", {})
     chat_id = message.get("chat", {}).get("id")
     text = message.get("text", "").strip() if "text" in message else ""
@@ -79,7 +77,6 @@ async def telegram_webhook(request: Request):
 
     state = user_states.get(chat_id, {"step": 0})
 
-    # Старт: приветствие, описание, выбор сферы
     if text.lower() in {"/start", "start"}:
         user_states[chat_id] = {"step": 0}
         bot.send_message(
@@ -100,15 +97,13 @@ async def telegram_webhook(request: Request):
         send_role_keyboard(chat_id)
         return JSONResponse(content={"ok": True})
 
-    # Рестарт: только выбор сферы (без приветствия)
     if text == "Рестарт":
         user_states[chat_id] = {"step": 0}
         send_role_keyboard(chat_id)
         return JSONResponse(content={"ok": True})
 
-    # Help: просто текст help
     if text == "Help":
-        bot.send_message(chat_id=chat_id, text= """🛠 Как работает ASKT:
+        bot.send_message(chat_id=chat_id, text="""🛠 Как работает ASKT:
 
 1️⃣ Выбираешь сферу — Работа, Учёба, Бизнес или Маркетинг  
 2️⃣ Отвечаешь на 3 простых вопроса  
@@ -129,7 +124,6 @@ ASKT помогает:
 """, reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
-    # О проекте: выводит описание
     if text == "О проекте":
         bot.send_message(chat_id=chat_id, text="""🛠 Этот проект — демонстрация.  
 Он показывает, как можно решать реальные задачи с помощью GPT — под любую сферу, нишу или цель.
@@ -179,7 +173,6 @@ Python · FastAPI · Telegram Bot API · Docker · Railway · OpenAI API · Prom
 ASKT — это не бот. Это стартовая точка взаимодействия с ИИ на твоих условиях.
 
 📬 Для связи: @veryhappyEpta
-
 """, reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
@@ -189,10 +182,6 @@ ASKT — это не бот. Это стартовая точка взаимод
             text="Хочешь оставить отзыв или предложение? Переходи сюда:\n👉https://t.me/ASKTFeedback",
             reply_markup=static_keyboard
         )
-        return JSONResponse(content={"ok": True})
-
-    if text == "Help":
-        bot.send_message(chat_id=chat_id, text="Help: выбери сферу, ответь на 3 вопроса, получи готовый ответ.", reply_markup=static_keyboard)
         return JSONResponse(content={"ok": True})
 
     step = state.get("step", 0)
@@ -214,17 +203,18 @@ ASKT — это не бот. Это стартовая точка взаимод
     if step == 3 and "goal" not in state:
         state["goal"] = text
         template_text = state.get("template", "")
+
         additions = (
-            f"\nКонтекст: {state.get('detail','')}\n"
-            f"Задача: {state.get('task','')}\n"
-            f"Цель: {state.get('goal','')}"
+            f"Роль: {state.get('detail', '')}\n"
+            f"Задача: {state.get('task', '')}\n"
+            f"Результат: {state.get('goal', '')}"
         )
-        prompt = template_text + additions
 
         messages = [
-            {"role": "system", "content": prompt},
+            {"role": "system", "content": template_text},
             {"role": "user", "content": additions}
         ]
+
         try:
             chat = client.chat.completions.create(
                 model="gpt-3.5-turbo",
@@ -236,11 +226,9 @@ ASKT — это не бот. Это стартовая точка взаимод
 
         bot.send_message(chat_id=chat_id, text="Готово! Вот твой структурированный ответ:", reply_markup=static_keyboard)
         bot.send_message(chat_id=chat_id, text=answer, reply_markup=static_keyboard)
-        # Не показываем кнопку "Рестарт" отдельно! Просто оставляем статичную клавиатуру
         user_states.pop(chat_id, None)
         return JSONResponse(content={"ok": True})
 
-    # Любой неожиданный ввод — сброс и выбор сферы
     bot.send_message(chat_id=chat_id, text="Некорректный ввод. Нажми 'Рестарт' и выбери сферу заново.", reply_markup=static_keyboard)
     user_states.pop(chat_id, None)
     return JSONResponse(content={"ok": True})
