@@ -1,0 +1,8 @@
+service: "service:svc"
+labels:
+  owner: Тоф
+python:
+  packages:
+    - openai
+    - bentoml
+    - python-dotenv
