@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 from bentoml import Service
 from bentoml.io import JSON
+from typing import Dict
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -10,7 +11,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 svc = Service(name="ProPlants")
 
 @svc.api(input=JSON(), output=JSON())
-async def generate(input_json: dict) -> dict:
+async def generate(input_json: Dict[str, str]) -> dict:
     question = input_json.get("input", "")
     if not question:
         return {"error": "No input provided."}
