@@ -8,7 +8,7 @@ load_dotenv()
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-svc = Service(name="plantspro", runners=[])
+svc = Service(name="ProPlants")
 
 @svc.api(input=JSON(), output=JSON())
 async def generate(input_json: dict) -> dict:
