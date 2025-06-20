@@ -1,8 +1,0 @@
-service: "service:ProPlantsService"
-labels:
-  owner: Тоф
-python:
-  packages:
-    - openai
-    - bentoml
-    - python-dotenv
