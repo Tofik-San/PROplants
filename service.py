@@ -1,16 +1,26 @@
-# service.py
-import bentoml
+import openai
+import os
+from dotenv import load_dotenv
+from bentoml import Service, HTTPServer
 from bentoml.io import JSON
-from gpt_module import generate_gpt_response
 
-svc = bentoml.Service("plants_gpt_service")
+load_dotenv()
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+svc = Service(name="plantspro", runners=[])
 
 @svc.api(input=JSON(), output=JSON())
-async def chat(data):
-    template = data.get("template", "")
-    detail = data.get("detail", "")
-    task = data.get("task", "")
-    goal = data.get("goal", "")
+async def generate(input_json: dict) -> dict:
+    question = input_json.get("input", "")
+    if not question:
+        return {"error": "No input provided."}
 
-    result = generate_gpt_response(template, detail, task, goal)
-    return {"response": result}
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "Ты бот-ботаник. Отвечай строго по делу."},
+            {"role": "user", "content": question}
+        ]
+    )
+    return {"answer": response.choices[0].message["content"]}
