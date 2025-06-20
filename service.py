@@ -1,11 +1,10 @@
 import openai
 import os
 from dotenv import load_dotenv
-from bentoml import Service, HTTPServer
+from bentoml import Service
 from bentoml.io import JSON
 
 load_dotenv()
-
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 svc = Service(name="ProPlants")
@@ -23,4 +22,5 @@ async def generate(input_json: dict) -> dict:
             {"role": "user", "content": question}
         ]
     )
+
     return {"answer": response.choices[0].message["content"]}
