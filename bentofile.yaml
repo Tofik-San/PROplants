@@ -1,4 +1,4 @@
-service: "service:svc"
+service: "service:ProPlantsService"
 labels:
   owner: Тоф
 python:
