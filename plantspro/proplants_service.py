@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-svc = bentoml.Service("plantspro_service")
+svc = bentoml.Service("proplants_service")
 
 @svc.api(input=JSON(), output=JSON())
 def generate(data):
